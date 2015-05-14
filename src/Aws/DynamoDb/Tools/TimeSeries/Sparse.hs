@@ -57,12 +57,13 @@ import           Aws.DynamoDb.Tools.Types
 saveCell
     :: ( TimeSeries v
        , DdbQuery n )
-    => Maybe v
+    => RetryPolicy
+    -> Maybe v
     -- ^ An old item, if there is one
     -> v
     -- ^ The new item to be written to db
     -> ResourceT n ()
-saveCell old new = do
+saveCell pol old new = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
 
     -- generate new cursor
@@ -70,8 +71,8 @@ saveCell old new = do
     let new' = new & updateCursor .~ u
 
     case update new' of
-      Left v -> void $ (cDynN 5) $ putItem tbl v
-      Right (pk, us) -> void $ (cDynN 5) $
+      Left v -> void $ (cDynN pol) $ putItem tbl v
+      Right (pk, us) -> void $ (cDynN pol) $
         (updateItem tbl pk us) { uiExpect = mkCond old }
     where
       update n =
@@ -103,14 +104,15 @@ saveCell old new = do
 -- | Get cell with an exactly known timestamp
 getCell
     :: (DdbQuery n , TimeSeries a )
-    => TimeSeriesKey a
+    => RetryPolicy
+    -> TimeSeriesKey a
     -> UTCTime
     -> ResourceT n (Either String a)
-getCell k at = do
+getCell pol k at = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
     let a = PrimaryKey (seriesKeyAttr k) (Just (attr "_t" at))
         q = GetItem tbl a Nothing True def
-    resp <- girItem <$> (cDynN 5) q
+    resp <- girItem <$> (cDynN pol) q
     return $ note missing resp >>= fromItem
   where
     missing = "TimeSeries cell not found: " ++ show (serializeSeriesKey k, at)
@@ -120,17 +122,18 @@ getCell k at = do
 getCells
     :: ( TimeSeries a
        , DdbQuery n )
-    => TimeSeriesKey a
+    => RetryPolicy
+    -> TimeSeriesKey a
     -> Maybe UTCTime
     -> Maybe UTCTime
     -> Int
     -- ^ Per-page pull from DynamoDb
     -> C.Producer (ResourceT n) (Either String a)
-getCells k fr to lim = do
+getCells pol k fr to lim = do
     tbl <- lift . lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice (seriesKeyAttr k) (Condition "_t" <$> cond)))
               { qLimit = Just lim, qForwardScan = False, qConsistent = True}
-    awsIteratedList' (cDynN 5) q =$= C.isolate lim =$= C.map fromItem
+    awsIteratedList' (cDynN pol) q =$= C.isolate lim =$= C.map fromItem
   where
 
     cond = between <|> gt <|> lt
@@ -148,9 +151,10 @@ getCells k fr to lim = do
 -- | Obtain the last cell in series.
 getLastCell
     :: (DdbQuery n, TimeSeries a)
-    => TimeSeriesKey a
+    => RetryPolicy
+    -> TimeSeriesKey a
     -> ResourceT n (Maybe (Either String a))
-getLastCell k = headMay <$> (getCells k Nothing Nothing 1 $$ C.take 1)
+getLastCell pol k = headMay <$> (getCells pol k Nothing Nothing 1 $$ C.take 1)
 
 
 -------------------------------------------------------------------------------
@@ -160,7 +164,8 @@ getLastCell k = headMay <$> (getCells k Nothing Nothing 1 $$ C.take 1)
 deleteCells
     :: ( DdbQuery n
        , SeriesKey k)
-    => k
+    => RetryPolicy
+    -> k
     -- ^ Series key to delete
     -> Maybe UTCTime
     -- ^ From time
@@ -169,11 +174,11 @@ deleteCells
     -> Maybe Int
     -- ^ Per-page limit during query scan
     -> ResourceT n ()
-deleteCells k fr to lim = do
+deleteCells pol k fr to lim = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice pkAttr (Condition "_t" <$> cond)))
               { qLimit = lim, qConsistent = True, qSelect = SelectSpecific ["_k", "_t"] }
-    awsIteratedList' (cDynN 5) q =$= C.mapM_ (void . cDynN 5 . del tbl) C.$$ C.sinkNull
+    awsIteratedList' (cDynN pol) q =$= C.mapM_ (void . cDynN pol . del tbl) C.$$ C.sinkNull
   where
 
     pkAttr = seriesKeyAttr k

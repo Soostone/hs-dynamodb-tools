@@ -7,6 +7,7 @@
 {-# LANGUAGE MultiWayIf                #-}
 {-# LANGUAGE NoMonomorphismRestriction #-}
 {-# LANGUAGE OverloadedStrings         #-}
+{-# LANGUAGE RankNTypes                #-}
 {-# LANGUAGE RecordWildCards           #-}
 {-# LANGUAGE ScopedTypeVariables       #-}
 {-# LANGUAGE StandaloneDeriving        #-}
@@ -229,22 +230,23 @@ collapseSeries f ts = M.elems $ collect mkKey id comb ts
 mergeIntoStream
     :: ( DdbQuery n
        , ToDynItem a, FromDynItem a, SafeCopy k, SeriesKey k, Typeable k)
-    => (Maybe (Timed k a) -> (Timed k a) -> Maybe (Timed k a))
+    => RetryPolicy
+    -> (Maybe (Timed k a) -> (Timed k a) -> Maybe (Timed k a))
     -- ^ how to update with values in the database
     -> Timed k a
     -> n (Either String ())
-mergeIntoStream f t = mergeOne t
+mergeIntoStream pol f t = mergeOne t
   where
 
     mergeOne = runResourceT .
       liftM (first (show :: SomeException -> String)) . try .
       recoverConditionalCheck 6 . mergeOne'
 
-    mergeOne' t = do
-        old <- getCell (getSeriesKey t) (t ^. timedAt) <&> hush
-        case f old t of
+    mergeOne' x = do
+        old <- getCell pol (getSeriesKey x) (x ^. timedAt) <&> hush
+        case f old x of
           Nothing -> return ()
-          Just a -> saveCell old a
+          Just a -> saveCell pol old a
 
 
 

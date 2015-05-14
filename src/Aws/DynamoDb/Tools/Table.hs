@@ -26,7 +26,6 @@ module Aws.DynamoDb.Tools.Table where
 
 -------------------------------------------------------------------------------
 import           Aws.DynamoDb
-import           Control.Lens
 import           Control.Monad.Catch
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource
@@ -49,9 +48,9 @@ createTableIfMissing
     -> m ()
 createTableIfMissing tbl = do
     nm <- dynTableFullname tbl
-    res <- try $ runResourceT $ cDynN 5 $ DescribeTable nm
+    res <- try $ runResourceT $ cDynN (dynRetryPolicy 5) $ DescribeTable nm
     case res of
       Right a -> $(logTM) DebugS $ showLS a
       Left (_ :: DdbError) -> void $ runResourceT $ do
-        res <- cDynN 5 tbl
+        res <- cDynN (dynRetryPolicy 5) tbl
         $(logTM) DebugS $ showLS res

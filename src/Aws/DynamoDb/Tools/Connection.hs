@@ -24,7 +24,10 @@
 -- Layer for issuing queries to DynamoDb.
 ----------------------------------------------------------------------------
 
-module Aws.DynamoDb.Tools.Connection where
+module Aws.DynamoDb.Tools.Connection
+    ( module Aws.DynamoDb.Tools.Connection
+    , RetryPolicy
+    ) where
 
 -------------------------------------------------------------------------------
 import qualified Aws                          as Aws
@@ -45,24 +48,6 @@ import           Aws.DynamoDb.Tools.Types
 -------------------------------------------------------------------------------
 
 
--------------------------------------------------------------------------------
--- | Recover from Aws errors, log ultimate failures.
-recoverAws
-    :: ( MonadIO m
-       , MonadMask m
-       , Applicative m
-       , KatipContext m)
-    => Int
-    -> m f
-    -> m f
-recoverAws n f = $(logFailureWhen) logchk $ recovering
-  (awsPolicy n) [dynRetryH, httpRetryH, networkRetryH] f
-  where
-    logchk e = fromMaybe True $ chk <$> fromException e
-    chk e = case ddbErrCode e of
-      ConditionalCheckFailedException -> False
-      _ -> True
-
 
 
 -------------------------------------------------------------------------------
@@ -74,11 +59,11 @@ cDynN
        , Aws.ServiceConfiguration r ~ DdbConfiguration
        , Applicative n
        , KatipContext n)
-    => Int
+    => RetryPolicy
     -- ^ Number of retries
     -> r
     -> ResourceT n b
-cDynN n r = recoverAws n (cDyn r)
+cDynN pol r = recoverDyn pol (cDyn r)
 
 
 -------------------------------------------------------------------------------
@@ -112,7 +97,7 @@ recoverConditionalCheck
     => Int
     -> m a
     -> m a
-recoverConditionalCheck n f = recovering (awsPolicy n) [h] f
+recoverConditionalCheck n f = recovering (dynRetryPolicy n) [h] f
   where
     h _ = Handler chk
 
@@ -122,12 +107,31 @@ recoverConditionalCheck n f = recovering (awsPolicy n) [h] f
 
 
 -------------------------------------------------------------------------------
--- | Our default policy for AWS ops
+-- | Our default policy for DynamoDb ops.
 --
--- > map (getRetryPolicy (awsPolicy 10)) [0..5]
+-- > map (getRetryPolicy (dynRetryPolicy 10)) [0..5]
 -- [Just 25000,Just 50000,Just 100000,Just 200000,Just 400000,Just 800000]
-awsPolicy :: Int -> RetryPolicy
-awsPolicy n = mempty <> limitRetries n <> exponentialBackoff 25000
+dynRetryPolicy :: Int -> RetryPolicy
+dynRetryPolicy n = mempty <> limitRetries n <> exponentialBackoff 25000
+
+
+-------------------------------------------------------------------------------
+-- | Recover from Aws errors, log ultimate failures.
+recoverDyn
+    :: ( MonadIO m
+       , MonadMask m
+       , Applicative m
+       , KatipContext m)
+    => RetryPolicy
+    -> m f
+    -> m f
+recoverDyn pol f = $(logFailureWhen) logchk $ recovering
+  pol [dynRetryH, httpRetryH, networkRetryH] f
+  where
+    logchk e = fromMaybe True $ chk <$> fromException e
+    chk e = case ddbErrCode e of
+      ConditionalCheckFailedException -> False
+      _ -> True
 
 
 -------------------------------------------------------------------------------
@@ -137,6 +141,3 @@ dynRetryH n = logRetries
   (return . shouldRetry . ddbErrCode)
   nologRetry
   n
-
-
-

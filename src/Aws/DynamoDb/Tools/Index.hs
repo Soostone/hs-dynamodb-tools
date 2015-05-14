@@ -127,14 +127,15 @@ deleteIndex
        , Applicative m
        , KatipContext m
        , DynIndex k)
-    => k
+    => RetryPolicy
+    -> k
     -> ResourceT m ()
-deleteIndex k = do
-    listIndex' k =$= C.mapM_ del $$ C.sinkNull
+deleteIndex pol k = do
+    listIndex' pol k =$= C.mapM_ del $$ C.sinkNull
   where
     del (v, i) = do
         tbl <- lift $ dynTableFullname dynIndexTable
-        void $ cDynN 5 $ (deleteItem tbl (mkKey v i))
+        void $ cDynN pol $ (deleteItem tbl (mkKey v i))
 
     mkKey v i = PrimaryKey
       (attr "k" (mkIndexKey k i))
@@ -164,7 +165,7 @@ addToIndex k v = do
 
     -- exceptions from conditional failures are expected routinely.
     -- catch them locally here.
-    recoverAws 5 $ (void (cDyn req)) `catch`
+    recoverDyn (dynRetryPolicy 5) $ (void (cDyn req)) `catch`
       (\e -> case ddbErrCode e of
                ConditionalCheckFailedException -> return ()
                _ -> throwM e)
@@ -180,9 +181,10 @@ listIndex
        , Applicative m
        , KatipContext m
        , DynIndex k)
-    => k
+    => RetryPolicy
+    -> k
     -> Producer (ResourceT m) (DynIndexVal k)
-listIndex k = listIndex' k =$= C.map fst
+listIndex pol k = listIndex' pol k =$= C.map fst
 
 
 -------------------------------------------------------------------------------
@@ -198,11 +200,12 @@ listIndex'
        , Applicative m
        , KatipContext m
        , DynIndex k)
-    => k
+    => RetryPolicy
+    -> k
     -- ^ Index key
     -> Producer (ResourceT m) (DynIndexVal k, Word64)
     -- ^ Enumeration of values in index with the shard they are from
-listIndex' k = do
+listIndex' pol k = do
     tbl <- lift . lift $ dynTableFullname dynIndexTable
 
     -- query for the Nth shard in ring.
@@ -210,7 +213,7 @@ listIndex' k = do
               { qConsistent = False }
 
     forM_ [0 .. (indexShards k - 1)] $ \ i ->
-          awsIteratedList' (cDynN 5) (q i) =$=
+          awsIteratedList' (cDynN pol) (q i) =$=
           C.mapMaybe (fmap (\ v -> (_unDynSc . indexVal $ v, i)) . hush . fromItem)
 
 

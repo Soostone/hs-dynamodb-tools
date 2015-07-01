@@ -96,7 +96,7 @@ dynTableFullname t = withNS (createTableName t) . _dcNamespace <$> getDynConfig
 
 -------------------------------------------------------------------------------
 withNS :: (IsString m, Monoid m) => m -> m -> m
-withNS tbl ns = "wl_" <> ns <> "_" <> tbl
+withNS tbl ns = ns <> "_" <> tbl
 
 
 -------------------------------------------------------------------------------

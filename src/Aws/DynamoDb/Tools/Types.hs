@@ -55,7 +55,7 @@ import           Data.UUID
 import           Data.Yaml                   ((.:), (.:?))
 import qualified Data.Yaml                   as Y
 import           GHC.Generics
-import           Katip
+import           Katip                       hiding (Item)
 import           MultiCompression
 import           Network.HTTP.Conduit
 import           System.Random

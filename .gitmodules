@@ -1,0 +1,12 @@
+[submodule "deps/retry"]
+	path = deps/retry
+	url = git@github.com:Soostone/retry.git
+[submodule "deps/multi-compression"]
+	path = deps/multi-compression
+	url = git@github.com:Soostone/multi-compression.git
+[submodule "deps/katip"]
+	path = deps/katip
+	url = git@github.com:Soostone/katip.git
+[submodule "deps/aws-utils"]
+	path = deps/aws-utils
+	url = git@bitbucket.org:soostone/aws-utils.git

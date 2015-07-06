@@ -14,6 +14,7 @@
 
 module Aws.DynamoDb.Tools.TimeSeries.Sparse
     ( saveCell
+    , saveCell'
     , getCell
     , getCells
     , getLastCell
@@ -63,7 +64,24 @@ saveCell
     -> v
     -- ^ The new item to be written to db
     -> ResourceT n ()
-saveCell pol old new = do
+saveCell a b c = void $ saveCell' id id a b c
+
+
+-------------------------------------------------------------------------------
+-- | Generalized version of 'saveCell' that takes command modifiers and
+-- doesn't discard results
+saveCell'
+    :: ( TimeSeries v
+       , DdbQuery n )
+    => (PutItem -> PutItem)
+    => (UpdateItem -> UpdateItem)
+    -> RetryPolicy
+    -> Maybe v
+    -- ^ An old item, if there is one
+    -> v
+    -- ^ The new item to be written to db
+    -> ResourceT n (Either PutItemResponse UpdateItemResponse)
+saveCell' modPut modUpdate pol old new = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
 
     -- generate new cursor
@@ -71,8 +89,8 @@ saveCell pol old new = do
     let new' = new & updateCursor .~ u
 
     case update new' of
-      Left v -> void $ (cDynN pol) $ putItem tbl v
-      Right (pk, us) -> void $ (cDynN pol) $
+      Left v -> fmap Left $ (cDynN pol) $ modPut $ putItem tbl v
+      Right (pk, us) -> fmap Right $ (cDynN pol) $ modUpdate $
         (updateItem tbl pk us) { uiExpect = mkCond old }
     where
       update n =

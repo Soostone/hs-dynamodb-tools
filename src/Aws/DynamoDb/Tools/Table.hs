@@ -52,5 +52,5 @@ createTableIfMissing tbl = do
     case res of
       Right a -> $(logTM) DebugS $ showLS a
       Left (_ :: DdbError) -> void $ runResourceT $ do
-        res <- cDynN (dynRetryPolicy 5) tbl
+        res <- cDynN (dynRetryPolicy 5) tbl { createTableName = nm }
         $(logTM) DebugS $ showLS res

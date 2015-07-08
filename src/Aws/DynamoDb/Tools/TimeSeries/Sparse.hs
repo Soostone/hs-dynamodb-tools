@@ -16,6 +16,7 @@ module Aws.DynamoDb.Tools.TimeSeries.Sparse
     ( saveCell
     , saveCell'
     , getCell
+    , getCell'
     , getCells
     , getLastCell
     , deleteCells
@@ -119,17 +120,28 @@ saveCell' modPut modUpdate pol old new = do
 
 
 -------------------------------------------------------------------------------
--- | Get cell with an exactly known timestamp
 getCell
     :: (DdbQuery n , TimeSeries a )
     => RetryPolicy
     -> TimeSeriesKey a
     -> UTCTime
     -> ResourceT n (Either String a)
-getCell pol k at = do
+getCell = getCell' id
+
+
+-------------------------------------------------------------------------------
+-- | Generalized version of 'getCell' that takes a command modifier
+getCell'
+    :: (DdbQuery n , TimeSeries a )
+    => (GetItem -> GetItem)
+    -> RetryPolicy
+    -> TimeSeriesKey a
+    -> UTCTime
+    -> ResourceT n (Either String a)
+getCell' modGI pol k at = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
     let a = PrimaryKey (seriesKeyAttr k) (Just (attr "_t" at))
-        q = GetItem tbl a Nothing True def
+        q = modGI $ GetItem tbl a Nothing True def
     resp <- girItem <$> (cDynN pol) q
     return $ note missing resp >>= fromItem
   where

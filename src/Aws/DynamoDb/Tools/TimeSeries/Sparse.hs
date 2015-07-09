@@ -149,6 +149,8 @@ getCell' modGI pol k at = do
 
 
 -------------------------------------------------------------------------------
+-- | Pull cells from a time series between the given timestamps. Note
+-- that results will come back in reverse chronological order (newest first).
 getCells
     :: ( TimeSeries a
        , DdbQuery n )

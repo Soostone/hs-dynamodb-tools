@@ -47,6 +47,7 @@ import           Data.Semigroup
 import           Data.String.Conv
 import           Data.Time
 import           Data.Time.Bins
+import           Data.Time.Locale.Compat              as LC
 import           Data.Typeable
 import           Data.UUID
 import           System.Locale
@@ -60,7 +61,7 @@ import           Aws.DynamoDb.Tools.Types
 
 -------------------------------------------------------------------------------
 showTime :: FormatTime t => t -> String
-showTime d = formatTime defaultTimeLocale "%m/%d/%Y %H:%M:%S" d
+showTime d = formatTime LC.defaultTimeLocale "%m/%d/%Y %H:%M:%S" d
 
 
 -------------------------------------------------------------------------------

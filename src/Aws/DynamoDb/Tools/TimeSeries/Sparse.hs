@@ -14,7 +14,9 @@
 
 module Aws.DynamoDb.Tools.TimeSeries.Sparse
     ( saveCell
+    , saveCell'
     , getCell
+    , getCell'
     , getCells
     , getLastCell
     , deleteCells
@@ -63,7 +65,24 @@ saveCell
     -> v
     -- ^ The new item to be written to db
     -> ResourceT n ()
-saveCell pol old new = do
+saveCell a b c = void $ saveCell' id id a b c
+
+
+-------------------------------------------------------------------------------
+-- | Generalized version of 'saveCell' that takes command modifiers and
+-- doesn't discard results
+saveCell'
+    :: ( TimeSeries v
+       , DdbQuery n )
+    => (PutItem -> PutItem)
+    -> (UpdateItem -> UpdateItem)
+    -> RetryPolicy
+    -> Maybe v
+    -- ^ An old item, if there is one
+    -> v
+    -- ^ The new item to be written to db
+    -> ResourceT n (Either PutItemResponse UpdateItemResponse)
+saveCell' modPut modUpdate pol old new = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
 
     -- generate new cursor
@@ -71,8 +90,8 @@ saveCell pol old new = do
     let new' = new & updateCursor .~ u
 
     case update new' of
-      Left v -> void $ (cDynN pol) $ putItem tbl v
-      Right (pk, us) -> void $ (cDynN pol) $
+      Left v -> fmap Left $ (cDynN pol) $ putItem tbl v
+      Right (pk, us) -> fmap Right $ (cDynN pol) $
         (updateItem tbl pk us) { uiExpect = mkCond old }
     where
       update n =
@@ -108,10 +127,22 @@ getCell
     -> TimeSeriesKey a
     -> UTCTime
     -> ResourceT n (Either String a)
-getCell pol k at = do
+getCell = getCell' id
+
+
+-------------------------------------------------------------------------------
+-- | Generalized version of 'getCell' that takes a command modifier
+getCell'
+    :: (DdbQuery n , TimeSeries a )
+    => (GetItem -> GetItem)
+    -> RetryPolicy
+    -> TimeSeriesKey a
+    -> UTCTime
+    -> ResourceT n (Either String a)
+getCell' modGI pol k at = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
     let a = PrimaryKey (seriesKeyAttr k) (Just (attr "_t" at))
-        q = GetItem tbl a Nothing True def
+        q = modGI $ GetItem tbl a Nothing True def
     resp <- girItem <$> (cDynN pol) q
     return $ note missing resp >>= fromItem
   where

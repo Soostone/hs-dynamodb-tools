@@ -90,8 +90,8 @@ saveCell' modPut modUpdate pol old new = do
     let new' = new & updateCursor .~ u
 
     case update new' of
-      Left v -> fmap Left $ (cDynN pol) $ putItem tbl v
-      Right (pk, us) -> fmap Right $ (cDynN pol) $
+      Left v -> fmap Left $ (cDynN pol) $ modPut $ putItem tbl v
+      Right (pk, us) -> fmap Right $ (cDynN pol) $ modUpdate $
         (updateItem tbl pk us) { uiExpect = mkCond old }
     where
       update n =
@@ -120,7 +120,6 @@ saveCell' modPut modUpdate pol old new = do
 
 
 -------------------------------------------------------------------------------
--- | Get cell with an exactly known timestamp
 getCell
     :: (DdbQuery n , TimeSeries a )
     => RetryPolicy
@@ -150,6 +149,8 @@ getCell' modGI pol k at = do
 
 
 -------------------------------------------------------------------------------
+-- | Pull cells from a time series between the given timestamps. Note
+-- that results will come back in reverse chronological order (newest first).
 getCells
     :: ( TimeSeries a
        , DdbQuery n )

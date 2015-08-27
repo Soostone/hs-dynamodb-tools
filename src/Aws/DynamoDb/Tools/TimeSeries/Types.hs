@@ -25,9 +25,8 @@ import           Aws.DynamoDb.Tools.Types
 
 dynTimeseriesTable :: CreateTable
 dynTimeseriesTable = CreateTable "timeseries"
-    [ AttributeDefinition "k" AttrBinary
-    , AttributeDefinition "ver" AttrNumber
-    , AttributeDefinition "idx" AttrBinary ]
+    [ AttributeDefinition "_k" AttrBinary
+    , AttributeDefinition "_t" AttrNumber]
     (HashAndRange "_k" "_t")
     (ProvisionedThroughput 10 10)
     [] []

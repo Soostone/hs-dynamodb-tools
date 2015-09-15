@@ -18,6 +18,7 @@ module Aws.DynamoDb.Tools.TimeSeries.Sparse
     , getCell
     , getCell'
     , getCells
+    , getCells'
     , getLastCell
     , deleteCells
     ) where
@@ -161,11 +162,29 @@ getCells
     -> Int
     -- ^ Per-page pull from DynamoDb
     -> C.Producer (ResourceT n) (Either String a)
-getCells pol k fr to lim = do
+getCells = getCells' id
+
+
+-------------------------------------------------------------------------------
+-- | General version of 'getCells' that lets you modify the query
+-- before its sent. One example is if you need chronological order,
+-- your modification function would set qForwardScan = True.
+getCells'
+    :: ( TimeSeries a
+       , DdbQuery n )
+    => (Query -> Query)
+    -> RetryPolicy
+    -> TimeSeriesKey a
+    -> Maybe UTCTime
+    -> Maybe UTCTime
+    -> Int
+    -- ^ Per-page pull from DynamoDb
+    -> C.Producer (ResourceT n) (Either String a)
+getCells' modQ pol k fr to lim = do
     tbl <- lift . lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice (seriesKeyAttr k) (Condition "_t" <$> cond)))
               { qLimit = Just lim, qForwardScan = False, qConsistent = True}
-    awsIteratedList' (cDynN pol) q =$= C.isolate lim =$= C.map fromItem
+    awsIteratedList' (cDynN pol) (modQ q) =$= C.isolate lim =$= C.map fromItem
   where
 
     cond = between <|> gt <|> lt

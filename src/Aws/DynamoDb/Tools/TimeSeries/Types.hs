@@ -66,16 +66,21 @@ class (ToDynItem a, FromDynItem a, TimeCursor a, UpdateCursor a
 -- | Types that can be used as keys in timeseries
 class SeriesKey k where
     serializeSeriesKey :: k -> B.ByteString
+    -- | Actual value that get stored in the table. If you use the
+    -- default schema, this will be a DBinary. If you've changed the
+    -- type in the schema, you can implement this accordingly
+    serializeSeriesKeyValue :: k -> DValue
+    serializeSeriesKeyValue = DBinary . serializeSeriesKey
 
 instance SeriesKey () where serializeSeriesKey _ = ""
 instance SeriesKey B.ByteString where serializeSeriesKey k = k
 
 
 -------------------------------------------------------------------------------
-seriesKey :: TimeSeries a => a -> B.ByteString
-seriesKey = serializeSeriesKey . getSeriesKey
+seriesKey :: TimeSeries a => a -> DValue
+seriesKey = serializeSeriesKeyValue . getSeriesKey
 
 
 -------------------------------------------------------------------------------
 seriesKeyAttr :: SeriesKey k => k -> Attribute
-seriesKeyAttr k = attr "_k" (serializeSeriesKey k)
+seriesKeyAttr k = attr "_k" (serializeSeriesKeyValue k)

@@ -97,7 +97,7 @@ recoverConditionalCheck
     => Int
     -> m a
     -> m a
-recoverConditionalCheck n f = recovering (dynRetryPolicy n) [h] f
+recoverConditionalCheck n f = recovering (dynRetryPolicy n) [h] (const f)
   where
     h _ = Handler chk
 
@@ -126,7 +126,7 @@ recoverDyn
     -> m f
     -> m f
 recoverDyn pol f = $(logFailureWhen) logchk $ recovering
-  pol [dynRetryH, httpRetryH, networkRetryH] f
+  pol [dynRetryH, httpRetryH, networkRetryH] (const f)
   where
     logchk e = fromMaybe True $ chk <$> fromException e
     chk e = case ddbErrCode e of
@@ -136,8 +136,8 @@ recoverDyn pol f = $(logFailureWhen) logchk $ recovering
 
 -------------------------------------------------------------------------------
 -- | Catch dyndb errors that make sense
-dynRetryH :: (MonadIO m, Applicative m, KatipContext m) => Int -> Handler m Bool
-dynRetryH n = logRetries
+dynRetryH :: (MonadIO m, Applicative m, KatipContext m) => RetryStatus -> Handler m Bool
+dynRetryH s = logRetries
   (return . shouldRetry . ddbErrCode)
   nologRetry
-  n
+  s

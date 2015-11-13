@@ -1,6 +1,3 @@
-[submodule "deps/retry"]
-	path = deps/retry
-	url = git@github.com:Soostone/retry.git
 [submodule "deps/multi-compression"]
 	path = deps/multi-compression
 	url = git@github.com:Soostone/multi-compression.git

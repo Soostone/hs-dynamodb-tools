@@ -1,0 +1,242 @@
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE RankNTypes                 #-}
+{-# LANGUAGE RecordWildCards            #-}
+{-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
+{-# LANGUAGE TypeFamilies               #-}
+{-# LANGUAGE UndecidableInstances       #-}
+module TestHelpers where
+
+
+-------------------------------------------------------------------------------
+import qualified Aws                                 as Aws
+import           Aws.DynamoDb
+import           Control.Applicative
+import           Control.Concurrent.STM
+import           Control.Concurrent.STM.TSem
+import           Control.Error
+import           Control.Lens
+import           Control.Monad.Base
+import           Control.Monad.Catch
+import           Control.Monad.Reader
+import           Control.Monad.Trans.Control
+import           Control.Monad.Trans.Resource
+import           Control.Retry
+import           Data.Aeson
+import           Data.ByteString                     (ByteString)
+import           Data.Monoid
+import           Data.Text                           (Text)
+import           Data.Time
+import           Data.Time.Clock.POSIX
+import           Data.Yaml
+import           Katip
+import           Network.HTTP.Conduit
+import           Test.Tasty
+-------------------------------------------------------------------------------
+import           Aws.DynamoDb.Tools.Connection
+import           Aws.DynamoDb.Tools.Table
+import           Aws.DynamoDb.Tools.TimeSeries.Types
+import           Aws.DynamoDb.Tools.Types
+-------------------------------------------------------------------------------
+
+
+nullTime :: UTCTime
+nullTime = posixSecondsToUTCTime 0
+
+
+-------------------------------------------------------------------------------
+data TSItem = TSItem {
+      _tsTimestamp :: !UTCTime
+    , _tsSeriesKey :: !ByteString
+    , _tsPayload   :: !Text
+    } deriving (Show, Eq)
+
+
+makeLenses ''TSItem
+
+
+instance TimeCursor TSItem where
+  timeCursor = _tsTimestamp
+
+
+instance UpdateCursor TSItem where
+  updatedAt = const nullTime
+  updateCursor = lens (const nilUuid) (\x _ -> x)
+
+
+instance TimeSeries TSItem where
+  type TimeSeriesKey TSItem = ByteString
+  getSeriesKey = _tsSeriesKey
+
+
+instance ToDynItem TSItem where
+  toItem TSItem {..} = item [ attr "v" _tsPayload
+                            , attr "_k" _tsSeriesKey
+                            , attr "_t" _tsTimestamp
+                            ]
+
+instance FromDynItem TSItem where
+  parseItem v = do
+    t <- getAttr "_t" v
+    k <- getAttr "_k" v
+    p <- getAttr "v" v
+    return (TSItem t k p)
+
+
+-------------------------------------------------------------------------------
+data DDBState = DDBState {
+      _ddbManager   :: !Manager
+    , _ddbAwsConfig :: !Aws.Configuration
+    , _ddbDConfig   :: !(DdbConfiguration Aws.NormalQuery)
+    , _ddbDynConfig :: !DynConfig
+    , _ddbLogEnv    :: !LogEnv
+    }
+
+
+makeLenses ''DDBState
+
+
+-------------------------------------------------------------------------------
+newtype DDB m a = DDB {
+      unDDB :: ReaderT DDBState m a
+    } deriving ( MonadIO
+               , Monad
+               , Functor
+               , Applicative
+               , MonadCatch
+               , MonadThrow
+               , MonadMask
+               , MonadTrans
+               , MonadReader DDBState
+               )
+
+
+-------------------------------------------------------------------------------
+instance MonadTransControl DDB where
+    type StT DDB a = StT (ReaderT DDBState) a
+    liftWith f = DDB $ ReaderT $ \r -> f $ \c -> runReaderT (unDDB c) r
+    restoreT = DDB . ReaderT . const
+
+
+-------------------------------------------------------------------------------
+instance MonadBase b m => MonadBase b (DDB m) where
+    liftBase = liftBaseDefault
+
+
+-------------------------------------------------------------------------------
+instance MonadBaseControl b m => MonadBaseControl b (DDB m) where
+   type StM (DDB m) a = ComposeSt DDB m a
+   liftBaseWith = defaultLiftBaseWith
+   restoreM     = defaultRestoreM
+
+
+-------------------------------------------------------------------------------
+instance (MonadIO m) => Katip (DDB m) where
+  getLogEnv = view ddbLogEnv
+
+
+-------------------------------------------------------------------------------
+instance (MonadIO m) => KatipContext (DDB m) where
+  getKatipNamespace = return mempty
+  getKatipContext = return mempty
+
+
+-------------------------------------------------------------------------------
+instance ( Monad m
+         , MonadIO m
+         , MonadBaseControl IO m
+         , MonadThrow m
+         , MonadCatch m
+         , MonadMask m) => DdbQuery (DDB m) where
+  getDdbManager = view ddbManager
+  getAwsConfig = view ddbAwsConfig
+  getDdbConfig = view ddbDConfig
+  getDynConfig = view ddbDynConfig
+
+-------------------------------------------------------------------------------
+withDDBState :: TSem -> (IO DDBState -> TestTree) -> TestTree
+withDDBState sem = withResource alloc free
+  where alloc = do atomically (waitTSem sem)
+                   s <- mkDDBState
+                   runDDB s $ do
+                     tblName <- getTblName
+                     createTableIfMissing (tbl { createTableName = tblName })
+                     created <- waitForTableCreation (constantDelay (3000000) <> limitRetries 5)
+                     unless created $ error "Table never got created"
+                   return s
+        free = resetDDBState
+
+
+-------------------------------------------------------------------------------
+mkDDBState :: IO DDBState
+mkDDBState = do
+  mgr <- newManager tlsManagerSettings
+  awsConf <- Aws.baseConfiguration
+  TestConfig {..} <- either throwM return =<< decodeFileEither "test/config.yml"
+  le <- initLogEnv "hs-dynamodb-tools" "test"
+  return (DDBState mgr awsConf tcDdbConfiguration tcDynConfig le)
+
+
+-------------------------------------------------------------------------------
+data TestConfig = TestConfig {
+      tcDdbConfiguration :: !(DdbConfiguration Aws.NormalQuery)
+    , tcDynConfig        :: !DynConfig
+    }
+
+
+instance FromJSON TestConfig where
+  parseJSON v = do
+    dc <- parseJSON v
+    let ddbCfg = fromDynConfig dc
+    return (TestConfig ddbCfg dc)
+    where fromDynConfig DynConfig {..} =
+            DdbConfiguration (Region _dcEndpoint _dcName)
+                             _dcProto
+                             _dcPort
+
+
+
+-------------------------------------------------------------------------------
+resetDDBState :: DDBState -> IO ()
+resetDDBState ds = runDDB ds $ do
+  tblName <- getTblName
+  void $ runResourceT (cDynN (dynRetryPolicy 5) (DeleteTable tblName))
+
+
+-------------------------------------------------------------------------------
+runDDB :: DDBState -> DDB m a -> m a
+runDDB s f = runReaderT (unDDB f) s
+
+
+-------------------------------------------------------------------------------
+tbl :: CreateTable
+tbl = CreateTable "timeseries"
+      [ AttributeDefinition "_k" AttrString
+      , AttributeDefinition "_t" AttrNumber]
+      (HashAndRange "_k" "_t")
+      (ProvisionedThroughput 10 10)
+      [] []
+
+
+-------------------------------------------------------------------------------
+getTblName :: (Functor m, DdbQuery m) => m Text
+getTblName = dynTableFullname tbl
+
+
+-------------------------------------------------------------------------------
+waitForTableCreation
+    :: forall m. ( MonadIO m
+       , MonadBaseControl IO m
+       , DdbQuery m)
+    => RetryPolicy
+    -> m Bool
+waitForTableCreation rp = do
+  nm <- getTblName
+  fmap isRight . retrying rp checkAgain $ const $
+    try $ runResourceT $ cDynN mempty (DescribeTable nm)
+  where checkAgain :: forall a b. a -> Either DdbError b -> m Bool
+        checkAgain _ = return . isLeft

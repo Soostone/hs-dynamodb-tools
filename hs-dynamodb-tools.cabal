@@ -87,3 +87,37 @@ library
   hs-source-dirs:     src
   default-language:   Haskell2010
   ghc-options:        -Wall
+
+
+test-suite test
+  type: exitcode-stdio-1.0
+  main-is: Main.hs
+  hs-source-dirs: test
+  build-depends:
+      hs-dynamodb-tools
+    , base
+    , tasty
+    , tasty-hunit
+    , tasty-quickcheck
+    , cereal
+    , quickcheck-instances
+    , stm
+    , retry
+    , time
+    , aws
+    , lens
+    , text
+    , http-conduit
+    , katip
+    , exceptions
+    , mtl
+    , monad-control
+    , transformers-base
+    , bytestring
+    , resourcet
+    , conduit
+    , yaml
+    , aeson
+    , errors
+  default-language:    Haskell2010
+  ghc-options:        -Wall -Werror -threaded

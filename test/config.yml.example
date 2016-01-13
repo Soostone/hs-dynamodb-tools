@@ -1,0 +1,4 @@
+namespace: hs_dynamodb_utils_yourname
+endpoint: "dynamodb.us-east-1.amazonaws.com"
+name: us-east-1
+proto: HTTPS

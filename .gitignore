@@ -2,3 +2,4 @@
 TAGS
 cabal.sandbox.config
 dist
+test/config.yml

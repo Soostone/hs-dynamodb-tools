@@ -25,7 +25,7 @@ import           GHC.Generics
 
 
 
-newtype SerializeUtcTime = SerializeUtcTime UTCTime
+newtype SerializeUtcTime = SerializeUtcTime UTCTime deriving (Show, Eq)
 makePrisms ''SerializeUtcTime
 
 instance Serialize SerializeUtcTime where

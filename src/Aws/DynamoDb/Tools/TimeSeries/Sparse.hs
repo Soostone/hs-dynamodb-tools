@@ -184,7 +184,7 @@ getCells' modQ pol k fr to lim = do
     tbl <- lift . lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice (seriesKeyAttr k) (Condition "_t" <$> cond)))
               { qLimit = Just lim, qForwardScan = False, qConsistent = True}
-    awsIteratedList' (cDynN pol) (modQ q) =$= C.isolate lim =$= C.map fromItem
+    awsIteratedList' (cDynN pol) (modQ q) =$= C.map fromItem
   where
 
     cond = between <|> gt <|> lt

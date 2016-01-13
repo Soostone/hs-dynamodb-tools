@@ -30,11 +30,14 @@ import           Data.Aeson
 import           Data.ByteString                     (ByteString)
 import           Data.Monoid
 import           Data.Text                           (Text)
+import qualified Data.Text                           as T
 import           Data.Time
 import           Data.Time.Clock.POSIX
 import           Data.Yaml
 import           Katip
 import           Network.HTTP.Conduit
+import           System.Environment
+import           System.IO
 import           Test.Tasty
 -------------------------------------------------------------------------------
 import           Aws.DynamoDb.Tools.Connection
@@ -163,9 +166,10 @@ withDDBState sem = withResource alloc free
   where alloc = do atomically (waitTSem sem)
                    s <- mkDDBState
                    runDDB s $ do
-                     tblName <- getTblName
-                     createTableIfMissing (tbl { createTableName = tblName })
-                     created <- waitForTableCreation (constantDelay (3000000) <> limitRetries 5)
+                     $(logTM) InfoS "Creating table"
+                     createTableIfMissing tbl
+                     $(logTM) InfoS "Waiting for table creation"
+                     created <- waitForTableCreation (constantDelay (3000000) <> limitRetries 10)
                      unless created $ error "Table never got created"
                    return s
         free = resetDDBState
@@ -175,10 +179,16 @@ withDDBState sem = withResource alloc free
 mkDDBState :: IO DDBState
 mkDDBState = do
   mgr <- newManager tlsManagerSettings
-  awsConf <- Aws.baseConfiguration
+  cFile <- Aws.credentialsDefaultFile
+  profile <- maybe Aws.credentialsDefaultKey T.pack <$> lookupEnv "AWS_PROFILE"
+  Just awsCreds <- Aws.loadCredentialsFromEnvOrFile cFile profile
+  let awsConf = Aws.Configuration Aws.Timestamp
+                                  awsCreds
+                                  (Aws.defaultLog Aws.Warning)
   TestConfig {..} <- either throwM return =<< decodeFileEither "test/config.yml"
   le <- initLogEnv "hs-dynamodb-tools" "test"
-  return (DDBState mgr awsConf tcDdbConfiguration tcDynConfig le)
+  scr <- mkHandleScribe ColorIfTerminal stderr DebugS V3
+  return (DDBState mgr awsConf tcDdbConfiguration tcDynConfig (registerScribe "stderr" scr le))
 
 
 -------------------------------------------------------------------------------
@@ -215,10 +225,10 @@ runDDB s f = runReaderT (unDDB f) s
 -------------------------------------------------------------------------------
 tbl :: CreateTable
 tbl = CreateTable "timeseries"
-      [ AttributeDefinition "_k" AttrString
+      [ AttributeDefinition "_k" AttrBinary
       , AttributeDefinition "_t" AttrNumber]
       (HashAndRange "_k" "_t")
-      (ProvisionedThroughput 10 10)
+      (ProvisionedThroughput 5 5)
       [] []
 
 
@@ -237,6 +247,7 @@ waitForTableCreation
 waitForTableCreation rp = do
   nm <- getTblName
   fmap isRight . retrying rp checkAgain $ const $
-    try $ runResourceT $ cDynN mempty (DescribeTable nm)
-  where checkAgain :: forall a b. a -> Either DdbError b -> m Bool
-        checkAgain _ = return . isLeft
+    try $ runResourceT $ cDyn (DescribeTable nm)
+  where checkAgain :: a -> Either DdbError DescribeTableResult -> m Bool
+        checkAgain _ (Right r) = return (rTableStatus (dtStatus r) == "CREATING")
+        checkAgain _ (Left _) = return True

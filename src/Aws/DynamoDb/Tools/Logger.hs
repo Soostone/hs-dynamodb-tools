@@ -13,8 +13,8 @@ import           Language.Haskell.TH
 -------------------------------------------------------------------------------
 
 
-runKatipStdout :: BlankLogT (KatipT m) a -> m a
-runKatipStdout = runKatipT _ioLogEnv . runBlankLogT
+runKatipStdout :: KatipContextT m a -> m a
+runKatipStdout = runKatipContextT _ioLogEnv () mempty
 
 
 -------------------------------------------------------------------------------

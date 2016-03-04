@@ -49,7 +49,7 @@ library
                     , ConstraintKinds
 
   build-depends:      base >=4.6 && <5
-                    , aeson >=0.7 && <0.11
+                    , aeson >=0.7 && <0.12
                     , aws
                     , aws-utils
                     , base64-bytestring >=1.0 && <1.1

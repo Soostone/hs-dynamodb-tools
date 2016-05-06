@@ -75,7 +75,7 @@ library
                     , random
                     , random >=1.1 && <1.2
                     , resourcet >=1.1 && <1.2
-                    , retry >= 0.7
+                    , retry >= 0.7.1
                     , safecopy >=0.8 && <0.10
                     , semigroups >=0.16 && <0.19
                     , string-conv >=0.1 && <0.2

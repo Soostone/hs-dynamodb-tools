@@ -27,8 +27,8 @@ logRetryCond = [| \ res msg ->
 
 -------------------------------------------------------------------------------
 -- | A NOOP function to work with logRetries.
-nologRetry :: Monad m => t -> t1 -> m ()
-nologRetry _ _ = return ()
+nologRetry :: Monad m => t -> t1 -> t2 -> m ()
+nologRetry _ _ _ = return ()
 
 
 -------------------------------------------------------------------------------

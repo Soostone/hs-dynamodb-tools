@@ -8,6 +8,7 @@ import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TSem
 import           Test.Tasty
 -------------------------------------------------------------------------------
+import qualified Aws.Test.DynamoDb.Tools.Capacity
 import qualified Aws.Test.DynamoDb.Tools.TimeSeries.Sparse
 import qualified Data.Test.Time.Bins
 -------------------------------------------------------------------------------
@@ -26,4 +27,5 @@ testSuite sem = testGroup "hs-dynamodb-tools"
   [
     Data.Test.Time.Bins.tests
   , Aws.Test.DynamoDb.Tools.TimeSeries.Sparse.tests sem
+  , Aws.Test.DynamoDb.Tools.Capacity.tests
   ]

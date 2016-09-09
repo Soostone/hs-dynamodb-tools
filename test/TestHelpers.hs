@@ -15,7 +15,7 @@ module TestHelpers where
 -------------------------------------------------------------------------------
 import qualified Aws                                 as Aws
 import           Aws.DynamoDb
-import           Control.Applicative
+import           Control.Applicative                 as A
 import           Control.Concurrent.STM
 import           Control.Concurrent.STM.TSem
 import           Control.Error
@@ -109,7 +109,7 @@ newtype DDB m a = DDB {
     } deriving ( MonadIO
                , Monad
                , Functor
-               , Applicative
+               , A.Applicative
                , MonadCatch
                , MonadThrow
                , MonadMask

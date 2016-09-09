@@ -21,6 +21,7 @@ library
                     , Aws.DynamoDb.Tools.Table
                     , Aws.DynamoDb.Tools.TimeSeries
                     , Aws.DynamoDb.Tools.Types
+                    , Aws.DynamoDb.Tools.Capacity
                     , Aws.DynamoDb.Tools.Connection
                     , Aws.DynamoDb.Tools.Logger
                     , Aws.DynamoDb.Tools.TimeSeries.Binned

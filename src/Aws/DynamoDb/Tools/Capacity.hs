@@ -24,4 +24,5 @@ estimateWriteUnits a = EstimatedWriteUnits (fromIntegral kbs)
   where
     bytes = dynSize a
     -- round up to the nearest 1kb
+    kbs :: Int
     kbs = ceiling (bytes % 1000)

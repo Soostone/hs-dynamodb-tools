@@ -15,6 +15,7 @@
 module Aws.DynamoDb.Tools.TimeSeries.Sparse
     ( saveCell
     , saveCell'
+    , saveCellItem
     , getCell
     , getCell'
     , getCells
@@ -38,6 +39,7 @@ import qualified Data.Conduit                        as C
 import qualified Data.Conduit.List                   as C
 import           Data.Default
 import qualified Data.Map                            as M
+import qualified Data.Text                           as T
 import           Data.Time
 import           System.Random
 -------------------------------------------------------------------------------
@@ -96,19 +98,10 @@ saveCell' modPut modUpdate pol old new = do
         (updateItem tbl pk us) { uiExpect = mkCond old }
     where
       update n =
-        let new' = mkItem n
+        let new' = saveCellItem n
         in maybe (Left new')
-                 (diffItem ["_k", "_t"] new' . mkItem)
+                 (diffItem ["_k", "_t"] new' . saveCellItem)
                  old
-
-      mkItem i = M.union (adds i) (toItem i)
-
-      adds i = item
-        [ attr "_k" (seriesKey i) -- primary/hash key
-        , attr "_t" (timeCursor i) -- secondary/range key
-        , attr "_l" (updatedAt i)
-        , attr "_s" (i ^. updateCursor)
-        ]
 
       -- prevent concurrent race conditions by requiring identity on
       -- cursor
@@ -119,6 +112,19 @@ saveCell' modPut modUpdate pol old new = do
           then []
           else [Condition "_s" (DEq (toValue (e ^. updateCursor)))]
 
+
+-------------------------------------------------------------------------------
+-- | Create the item for a saveCell call. Useful for estimating
+-- capacity usage ahead of time.
+saveCellItem :: (ToDynItem a, TimeSeries a) => a -> M.Map T.Text DValue
+saveCellItem i = M.union adds (toItem i)
+  where
+    adds = item
+      [ attr "_k" (seriesKey i) -- primary/hash key
+      , attr "_t" (timeCursor i) -- secondary/range key
+      , attr "_l" (updatedAt i)
+      , attr "_s" (i ^. updateCursor)
+      ]
 
 -------------------------------------------------------------------------------
 getCell

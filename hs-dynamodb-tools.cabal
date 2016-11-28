@@ -54,20 +54,20 @@ library
                     , aws
                     , aws-utils
                     , base64-bytestring >=1.0 && <1.1
-                    , bifunctors >=4.2 && <5.3
+                    , bifunctors >=4.2 && <5.5
                     , byteable >=0.1 && <0.2
                     , bytestring >=0.10 && <0.11
                     , cereal >=0.4 && <0.6
                     , conduit >=1.2 && <1.3
                     , containers >=0.5 && <0.6
                     , cryptohash >=0.11 && <0.12
-                    , data-default >=0.5 && <0.6
+                    , data-default >=0.5 && <0.8
                     , errors >=1.4 && <2.2
                     , exceptions >=0.8 && <0.9
                     , hashable >=1.2 && <1.3
                     , http-conduit
                     , katip
-                    , lens >=4.8 && <4.14
+                    , lens >=4.8 && <4.15
                     , mmorph
                     , monad-control
                     , mtl >=2.2 && <2.3
@@ -81,9 +81,9 @@ library
                     , semigroups >=0.16 && <0.19
                     , string-conv >=0.1 && <0.2
                     , tagged >=0.7 && <0.9
-                    , template-haskell >=2.8 && <2.11
+                    , template-haskell >=2.8 && <2.12
                     , text >=1.1 && <1.3
-                    , time >=1.4 && <1.6
+                    , time >=1.4 && <1.7
                     , time-locale-compat >= 0.1.1.0 && < 0.2
                     , uuid
                     , yaml >=0.8 && <0.9

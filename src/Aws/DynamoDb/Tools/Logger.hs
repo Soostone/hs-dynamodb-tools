@@ -6,6 +6,7 @@ module Aws.DynamoDb.Tools.Logger where
 -------------------------------------------------------------------------------
 import           Control.Monad
 import           Control.Monad.Catch
+import           Control.Monad.IO.Class
 import           Data.Monoid
 import           Katip
 import           Katip.Scribes.Handle
@@ -13,8 +14,10 @@ import           Language.Haskell.TH
 -------------------------------------------------------------------------------
 
 
-runKatipStdout :: KatipContextT m a -> m a
-runKatipStdout = runKatipContextT _ioLogEnv () mempty
+runKatipStdout :: (MonadIO m) =>  KatipContextT m a -> m a
+runKatipStdout f = do
+  le <- liftIO (ioLogEnv DebugS V3)
+  runKatipContextT le () mempty f
 
 
 -------------------------------------------------------------------------------

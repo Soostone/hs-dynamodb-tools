@@ -31,7 +31,6 @@ module Aws.DynamoDb.Tools.Types where
 import qualified Aws                         as Aws
 import           Aws.Core
 import           Aws.DynamoDb
-import           Control.Applicative
 import           Control.Error
 import           Control.Lens                hiding (au)
 import           Control.Monad.Catch
@@ -41,8 +40,8 @@ import           Crypto.Hash.SHA256          as Crypto (hash)
 import qualified Data.ByteString.Char8       as B
 import qualified Data.Foldable               as F
 import           Data.Hashable
-import qualified Data.Map                    as M
-import           Data.Monoid
+import qualified Data.Map.Strict             as M
+import           Data.Monoid                 as Monoid
 import qualified Data.SafeCopy               as SC
 import qualified Data.Serialize              as SL
 import           Data.String
@@ -95,13 +94,13 @@ dynTableFullname t = withNS (createTableName t) . _dcNamespace <$> getDynConfig
 
 
 -------------------------------------------------------------------------------
-withNS :: (IsString m, Monoid m) => m -> m -> m
+withNS :: (IsString m, Monoid.Monoid m) => m -> m -> m
 withNS tbl ns = ns <> "_" <> tbl
 
 
 -------------------------------------------------------------------------------
 schemaKeys :: KeySchema -> [Text]
-schemaKeys (HashOnly k) = [k]
+schemaKeys (HashOnly k)       = [k]
 schemaKeys (HashAndRange k v) = [k, v]
 
 
@@ -204,7 +203,7 @@ instance SC.SafeCopy DynUuid where
       s <- SC.safeGet
       case fromByteString s of
         Nothing -> fail "Can't parse UUID"
-        Just x -> return $ DynUuid x
+        Just x  -> return $ DynUuid x
 
 
 -------------------------------------------------------------------------------
@@ -253,8 +252,8 @@ diffItem ks new old =
 
 
       mkPrimary [a,b] = PrimaryKey a (Just b)
-      mkPrimary [a] = PrimaryKey a Nothing
-      mkPrimary _ = error "unexpected argument to mkPrimary"
+      mkPrimary [a]   = PrimaryKey a Nothing
+      mkPrimary _     = error "unexpected argument to mkPrimary"
 
 
 itemUpdate :: Item -> [AttributeUpdate]
@@ -311,7 +310,7 @@ collect :: (Ord k, F.Foldable t)
         -> M.Map k v
 collect k v f as = F.foldr step M.empty as
     where
-      step a r = M.insertWith' f (k a) (v a) r
+      step a r = M.insertWith f (k a) (v a) r
 
 
 

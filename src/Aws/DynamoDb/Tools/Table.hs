@@ -41,16 +41,16 @@ import           Aws.DynamoDb.Tools.Types
 -- | Create given table with some default settings.
 createTableIfMissing
     :: ( MonadIO m
-       , MonadBaseControl IO m
+       , MonadUnliftIO m
        , DdbQuery m
        , KatipContext m)
     => CreateTable
     -> m ()
 createTableIfMissing tbl = do
     nm <- dynTableFullname tbl
-    res <- try $ runResourceT $ cDynN (dynRetryPolicy 5) $ DescribeTable nm
-    case res of
+    describeRes <- try $ runResourceT $ cDynN (dynRetryPolicy 5) $ DescribeTable nm
+    case describeRes of
       Right a -> $(logTM) DebugS $ showLS a
       Left (_ :: DdbError) -> void $ runResourceT $ do
-        res <- cDynN (dynRetryPolicy 5) tbl { createTableName = nm }
-        $(logTM) DebugS $ showLS res
+        createRes <- cDynN (dynRetryPolicy 5) tbl { createTableName = nm }
+        $(logTM) DebugS $ showLS createRes

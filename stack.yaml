@@ -1,0 +1,14 @@
+resolver: lts-12.24
+packages:
+  - "."
+flags:
+  hs-dynamodb-tools:
+    lib-Werror: true
+extra-deps:
+  - aws-0.20
+  - katip-0.7.0.0
+  - deps/aws-utils
+  - deps/multi-compression
+  - heist-1.1.0.1
+  - xmlhtml-0.2.5.2
+  - map-syntax-0.3

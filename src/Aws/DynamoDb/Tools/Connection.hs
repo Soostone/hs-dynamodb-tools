@@ -33,14 +33,13 @@ module Aws.DynamoDb.Tools.Connection
 import qualified Aws                          as Aws
 import           Aws.DynamoDb
 import           AWS.Utils.Retry              (httpRetryH, networkRetryH)
-import           Control.Applicative
 import           Control.Error
 import           Control.Monad.Catch
 import           Control.Monad.Morph
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource
 import           Control.Retry
-import           Data.Monoid
+import           Data.Monoid                  as Monoid
 import           Katip
 -------------------------------------------------------------------------------
 import           Aws.DynamoDb.Tools.Logger
@@ -82,7 +81,7 @@ cDyn r = do
     mgr <- lift getDdbManager
     conf <- lift getAwsConfig
     dynConf <- lift getDdbConfig
-    hoist liftIO $ Aws.pureAws conf dynConf mgr r
+    liftResourceT $ Aws.pureAws conf dynConf mgr r
 
 
 -------------------------------------------------------------------------------
@@ -103,7 +102,7 @@ recoverConditionalCheck n f = recovering (dynRetryPolicy n) [h] (const f)
 
     chk e = return $ case ddbErrCode e of
         ConditionalCheckFailedException -> True
-        _ -> False
+        _                               -> False
 
 
 -------------------------------------------------------------------------------
@@ -112,7 +111,7 @@ recoverConditionalCheck n f = recovering (dynRetryPolicy n) [h] (const f)
 -- > map (getRetryPolicy (dynRetryPolicy 10)) [0..5]
 -- [Just 25000,Just 50000,Just 100000,Just 200000,Just 400000,Just 800000]
 dynRetryPolicy :: Int -> RetryPolicy
-dynRetryPolicy n = mempty <> limitRetries n <> exponentialBackoff 25000
+dynRetryPolicy n = Monoid.mempty <> limitRetries n <> exponentialBackoff 25000
 
 
 -------------------------------------------------------------------------------
@@ -131,7 +130,7 @@ recoverDyn pol f = $(logFailureWhen) logchk $ recovering
     logchk e = fromMaybe True $ chk <$> fromException e
     chk e = case ddbErrCode e of
       ConditionalCheckFailedException -> False
-      _ -> True
+      _                               -> True
 
 
 -------------------------------------------------------------------------------

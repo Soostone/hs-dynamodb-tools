@@ -22,13 +22,14 @@ import           Control.Error
 import           Control.Lens
 import           Control.Monad.Base
 import           Control.Monad.Catch
+import           Control.Monad.IO.Unlift
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Control
 import           Control.Monad.Trans.Resource
 import           Control.Retry
 import           Data.Aeson
 import           Data.ByteString                     (ByteString)
-import           Data.Monoid
+import           Data.Semigroup                      as Semigroup
 import           Data.Text                           (Text)
 import qualified Data.Text                           as T
 import           Data.Time
@@ -118,6 +119,13 @@ newtype DDB m a = DDB {
                )
 
 
+instance (MonadUnliftIO m) => MonadUnliftIO (DDB m) where
+  askUnliftIO = DDB (go <$> askUnliftIO)
+    where
+      go :: UnliftIO (ReaderT DDBState m) -> UnliftIO (DDB m)
+      go (UnliftIO x) = (UnliftIO (\(DDB r) -> x r))
+
+
 -------------------------------------------------------------------------------
 instance MonadTransControl DDB where
     type StT DDB a = StT (ReaderT DDBState) a
@@ -140,12 +148,16 @@ instance MonadBaseControl b m => MonadBaseControl b (DDB m) where
 -------------------------------------------------------------------------------
 instance (MonadIO m) => Katip (DDB m) where
   getLogEnv = view ddbLogEnv
+  localLogEnv f (DDB m) = DDB (local (\ddbState -> ddbState { _ddbLogEnv = f (_ddbLogEnv ddbState)}) m)
 
 
 -------------------------------------------------------------------------------
+-- | We don't really care to use the context or namespace just for these tests
 instance (MonadIO m) => KatipContext (DDB m) where
   getKatipNamespace = return mempty
+  localKatipNamespace _ m = m
   getKatipContext = return mempty
+  localKatipContext _ m = m
 
 
 -------------------------------------------------------------------------------
@@ -169,7 +181,7 @@ withDDBState sem = withResource alloc free
                      $(logTM) InfoS "Creating table"
                      createTableIfMissing tbl
                      $(logTM) InfoS "Waiting for table creation"
-                     created <- waitForTableCreation (constantDelay (3000000) <> limitRetries 10)
+                     created <- waitForTableCreation (constantDelay (3000000) Semigroup.<> limitRetries 10)
                      unless created $ error "Table never got created"
                    return s
         free = resetDDBState
@@ -181,14 +193,18 @@ mkDDBState = do
   mgr <- newManager tlsManagerSettings
   cFile <- Aws.credentialsDefaultFile
   profile <- maybe Aws.credentialsDefaultKey T.pack <$> lookupEnv "AWS_PROFILE"
-  Just awsCreds <- Aws.loadCredentialsFromEnvOrFile cFile profile
+  Just awsCreds <- case cFile of
+    Just f  -> Aws.loadCredentialsFromFile f profile
+    Nothing -> Aws.loadCredentialsFromEnv
+  let noProxy = Nothing
   let awsConf = Aws.Configuration Aws.Timestamp
                                   awsCreds
                                   (Aws.defaultLog Aws.Warning)
+                                  noProxy
   TestConfig {..} <- either throwM return =<< decodeFileEither "test/config.yml"
-  le <- initLogEnv "hs-dynamodb-tools" "test"
   scr <- mkHandleScribe ColorIfTerminal stderr DebugS V3
-  return (DDBState mgr awsConf tcDdbConfiguration tcDynConfig (registerScribe "stderr" scr le))
+  le <- registerScribe "stderr" scr defaultScribeSettings =<< initLogEnv "hs-dynamodb-tools" "test"
+  return (DDBState mgr awsConf tcDdbConfiguration tcDynConfig le)
 
 
 -------------------------------------------------------------------------------
@@ -240,7 +256,7 @@ getTblName = dynTableFullname tbl
 -------------------------------------------------------------------------------
 waitForTableCreation
     :: forall m. ( MonadIO m
-       , MonadBaseControl IO m
+       , MonadUnliftIO m
        , DdbQuery m)
     => RetryPolicy
     -> m Bool

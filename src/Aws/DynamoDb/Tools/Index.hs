@@ -35,7 +35,6 @@ module Aws.DynamoDb.Tools.Index
 -------------------------------------------------------------------------------
 import           Aws.Aws
 import           Aws.DynamoDb
-import           Control.Applicative
 import           Control.Error
 import           Control.Lens
 import           Control.Monad.Catch
@@ -131,7 +130,7 @@ deleteIndex
     -> k
     -> ResourceT m ()
 deleteIndex pol k = do
-    listIndex' pol k =$= C.mapM_ del $$ C.sinkNull
+    runConduit (listIndex' pol k .| C.mapM_ del .| C.sinkNull)
   where
     del (v, i) = do
         tbl <- lift $ dynTableFullname dynIndexTable
@@ -183,12 +182,12 @@ listIndex
        , DynIndex k)
     => RetryPolicy
     -> k
-    -> Producer (ResourceT m) (DynIndexVal k)
-listIndex pol k = listIndex' pol k =$= C.map fst
+    -> ConduitM () (DynIndexVal k) (ResourceT m) ()
+listIndex pol k = listIndex' pol k .| C.map fst
 
 
 -------------------------------------------------------------------------------
-sinkSet :: (Monad m, Ord a) => Consumer a m (S.Set a)
+sinkSet :: (Monad m, Ord a) => ConduitM a () m (S.Set a)
 sinkSet = C.fold (flip S.insert) S.empty
 
 
@@ -203,7 +202,7 @@ listIndex'
     => RetryPolicy
     -> k
     -- ^ Index key
-    -> Producer (ResourceT m) (DynIndexVal k, Word64)
+    -> ConduitM () (DynIndexVal k, Word64) (ResourceT m) ()
     -- ^ Enumeration of values in index with the shard they are from
 listIndex' pol k = do
     tbl <- lift . lift $ dynTableFullname dynIndexTable
@@ -213,7 +212,7 @@ listIndex' pol k = do
               { qConsistent = False }
 
     forM_ [0 .. (indexShards k - 1)] $ \ i ->
-          awsIteratedList' (cDynN pol) (q i) =$=
+          awsIteratedList' (cDynN pol) (q i) .|
           C.mapMaybe (fmap (\ v -> (_unDynSc . indexVal $ v, i)) . hush . fromItem)
 
 
@@ -292,4 +291,3 @@ instance (Typeable v, SafeCopy v) => FromDynItem (IndexItem v) where
     parseItem m = IndexItem
       <$> getAttr "k" m
       <*> getAttr "v" m
-

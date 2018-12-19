@@ -43,14 +43,13 @@ import           Data.Default
 import           Data.Foldable                        (Foldable)
 import qualified Data.Map                             as M
 import           Data.SafeCopy
-import           Data.Semigroup
+import           Data.Semigroup                       as Semigroup
 import           Data.String.Conv
 import           Data.Time
 import           Data.Time.Bins
 import           Data.Time.Locale.Compat              as LC
 import           Data.Typeable
 import           Data.UUID
-import           System.Locale
 -------------------------------------------------------------------------------
 import           Aws.DynamoDb.Tools.Connection
 import           Aws.DynamoDb.Tools.TimeSeries.Sparse
@@ -100,7 +99,7 @@ makeLenses ''Timed
 deriveSafeCopy 1 'base ''Timed
 
 
-instance Semigroup a => Semigroup (Timed k a) where
+instance Semigroup.Semigroup a => Semigroup (Timed k a) where
     t1 <> t2 = t2
       & combine timedUpdated max t1 t2
       & combine timedCursor (\ _ b -> b) t1 t2
@@ -230,6 +229,7 @@ collapseSeries f ts = M.elems $ collect mkKey id comb ts
 -------------------------------------------------------------------------------
 mergeIntoStream
     :: ( DdbQuery n
+       , MonadUnliftIO n
        , ToDynItem a, FromDynItem a, SafeCopy k, SeriesKey k, Typeable k)
     => RetryPolicy
     -> (Maybe (Timed k a) -> (Timed k a) -> Maybe (Timed k a))
@@ -247,7 +247,7 @@ mergeIntoStream pol f t = mergeOne t
         old <- getCell pol (getSeriesKey x) (x ^. timedAt) <&> hush
         case f old x of
           Nothing -> return ()
-          Just a -> saveCell pol old a
+          Just a  -> saveCell pol old a
 
 
 

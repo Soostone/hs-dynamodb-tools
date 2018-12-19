@@ -141,9 +141,9 @@ truncateUtc bin (UTCTime day diff) = UTCTime (fromGregorian yr' mo' d') diff'
               | otherwise      -> d
 
       diff' = if | bin < BinHour -> 0
-                 | bin == BinHour -> truncDiff 3600 diff
-                 | bin == BinMinute -> truncDiff 60 diff
-                 | bin == BinSecond -> truncDiff 1 diff
+                 | bin == BinHour -> truncDiff (3600 :: Integer) diff
+                 | bin == BinMinute -> truncDiff (60 :: Integer) diff
+                 | bin == BinSecond -> truncDiff (1 :: Integer) diff
                  | otherwise -> diff
 
 

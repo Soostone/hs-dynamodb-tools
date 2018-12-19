@@ -6,8 +6,8 @@ module Aws.DynamoDb.Tools.Logger where
 -------------------------------------------------------------------------------
 import           Control.Monad
 import           Control.Monad.Catch
+import Data.Monoid as Monoid
 import           Control.Monad.IO.Class
-import           Data.Monoid
 import           Katip
 import           Katip.Scribes.Handle
 import           Language.Haskell.TH
@@ -50,6 +50,6 @@ logFailureWhen =
          Right a -> return a
          Left e -> do
            when (chk e) $
-             $(logTM) ErrorS (ls $ "Exception: " <> show e)
+             $(logTM) ErrorS (ls ("Exception: " Monoid.<> show e))
            throwM (e :: SomeException)
   |]

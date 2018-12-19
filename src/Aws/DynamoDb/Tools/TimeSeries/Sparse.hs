@@ -34,7 +34,7 @@ import           Control.Lens
 import           Control.Monad
 import           Control.Monad.Reader
 import           Control.Monad.Trans.Resource
-import           Data.Conduit                        (($$), (=$=))
+import           Data.Conduit                        (runConduit, (.|))
 import qualified Data.Conduit                        as C
 import qualified Data.Conduit.List                   as C
 import           Data.Default
@@ -145,14 +145,14 @@ getCell'
     -> TimeSeriesKey a
     -> UTCTime
     -> ResourceT n (Either String a)
-getCell' modGI pol k at = do
+getCell' modGI pol k timestamp = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
-    let a = PrimaryKey (seriesKeyAttr k) (Just (attr "_t" at))
+    let a = PrimaryKey (seriesKeyAttr k) (Just (attr "_t" timestamp))
         q = modGI $ GetItem tbl a Nothing True def
     resp <- girItem <$> (cDynN pol) q
     return $ note missing resp >>= fromItem
   where
-    missing = "TimeSeries cell not found: " ++ show (serializeSeriesKey k, at)
+    missing = "TimeSeries cell not found: " ++ show (serializeSeriesKey k, timestamp)
 
 
 -------------------------------------------------------------------------------
@@ -167,7 +167,7 @@ getCells
     -> Maybe UTCTime
     -> Int
     -- ^ Per-page pull from DynamoDb
-    -> C.Producer (ResourceT n) (Either String a)
+    -> C.ConduitM () (Either String a) (ResourceT n) ()
 getCells = getCells' id
 
 
@@ -185,23 +185,23 @@ getCells'
     -> Maybe UTCTime
     -> Int
     -- ^ Per-page pull from DynamoDb
-    -> C.Producer (ResourceT n) (Either String a)
-getCells' modQ pol k fr to lim = do
+    -> C.ConduitM () (Either String a) (ResourceT n) ()
+getCells' modQ pol k frTime toTime lim = do
     tbl <- lift . lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice (seriesKeyAttr k) (Condition "_t" <$> cond)))
               { qLimit = Just lim, qForwardScan = False, qConsistent = True}
-    awsIteratedList' (cDynN pol) (modQ q) =$= C.map fromItem
+    awsIteratedList' (cDynN pol) (modQ q) .| C.map fromItem
   where
 
     cond = between <|> gt <|> lt
 
     between = do
-        fr' <- fr
-        to' <- to
-        return $ Between (toValue fr') (toValue to')
+        frTime' <- frTime
+        toTime' <- toTime
+        return $ Between (toValue frTime') (toValue toTime')
 
-    gt = DGE . toValue <$> fr
-    lt = DLE . toValue <$> to
+    gt = DGE . toValue <$> frTime
+    lt = DLE . toValue <$> toTime
 
 
 -------------------------------------------------------------------------------
@@ -211,7 +211,7 @@ getLastCell
     => RetryPolicy
     -> TimeSeriesKey a
     -> ResourceT n (Maybe (Either String a))
-getLastCell pol k = headMay <$> (getCells pol k Nothing Nothing 1 $$ C.take 1)
+getLastCell pol k = headMay <$> runConduit (getCells pol k Nothing Nothing 1 .| C.take 1)
 
 
 -------------------------------------------------------------------------------
@@ -231,11 +231,11 @@ deleteCells
     -> Maybe Int
     -- ^ Per-page limit during query scan
     -> ResourceT n ()
-deleteCells pol k fr to lim = do
+deleteCells pol k frTime toTime lim = do
     tbl <- lift $ dynTableFullname dynTimeseriesTable
     let q = (query tbl (Slice pkAttr (Condition "_t" <$> cond)))
               { qLimit = lim, qConsistent = True, qSelect = SelectSpecific ["_k", "_t"] }
-    awsIteratedList' (cDynN pol) q =$= C.mapM_ (void . cDynN pol . del tbl) C.$$ C.sinkNull
+    runConduit (awsIteratedList' (cDynN pol) q .| C.mapM_ (void . cDynN pol . del tbl) .| C.sinkNull)
   where
 
     pkAttr = seriesKeyAttr k
@@ -247,12 +247,12 @@ deleteCells pol k fr to lim = do
     cond = between <|> gt <|> lt
 
     between = do
-        fr' <- fr
-        to' <- to
-        return $ Between (toValue fr') (toValue to')
+        frTime' <- frTime
+        toTime' <- toTime
+        return $ Between (toValue frTime') (toValue toTime')
 
-    gt = DGE . toValue <$> fr
-    lt = DLE . toValue <$> to
+    gt = DGE . toValue <$> frTime
+    lt = DLE . toValue <$> toTime
 
 
 

@@ -31,7 +31,7 @@ tests sem = testGroup "Aws.DynamoDb.Tools.TimeSeries.Sparse"
       cells <- runDDB ddb $ runResourceT $ do
         saveCell rp Nothing item1
         saveCell rp Nothing item2
-        getCells rp (_tsSeriesKey item1) Nothing Nothing 1 $$ CL.consume
+        runConduit (getCells rp (_tsSeriesKey item1) Nothing Nothing 1 .| CL.consume)
       cells @?= [Right item2, Right item1]
   ]
 

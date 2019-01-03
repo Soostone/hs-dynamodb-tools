@@ -1,13 +1,13 @@
 {-# LANGUAGE LambdaCase      #-}
 {-# LANGUAGE TemplateHaskell #-}
-
+{-# LANGUAGE CPP #-}
 module Aws.DynamoDb.Tools.Logger where
 
 -------------------------------------------------------------------------------
 import           Control.Monad
 import           Control.Monad.Catch
-import Data.Monoid as Monoid
 import           Control.Monad.IO.Class
+import           Data.Monoid            as Monoid
 import           Katip
 import           Katip.Scribes.Handle
 import           Language.Haskell.TH
@@ -16,7 +16,11 @@ import           Language.Haskell.TH
 
 runKatipStdout :: (MonadIO m) =>  KatipContextT m a -> m a
 runKatipStdout f = do
+#if MIN_VERSION_katip(0,8,0)
+  le <- liftIO (ioLogEnv (permitItem DebugS) V3)
+#else
   le <- liftIO (ioLogEnv DebugS V3)
+#endif
   runKatipContextT le () mempty f
 
 

@@ -6,4 +6,4 @@
 	url = git@github.com:Soostone/katip.git
 [submodule "deps/aws-utils"]
 	path = deps/aws-utils
-	url = git@bitbucket.org:soostone/aws-utils.git
+	url = git@gitlab.com:soostone/shared/aws-utils.git

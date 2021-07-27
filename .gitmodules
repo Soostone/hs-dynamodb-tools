@@ -1,9 +1,9 @@
 [submodule "deps/multi-compression"]
 	path = deps/multi-compression
-	url = git@github.com:Soostone/multi-compression.git
+	url = https://github.com/Soostone/multi-compression.git
 [submodule "deps/katip"]
 	path = deps/katip
-	url = git@github.com:Soostone/katip.git
+	url = https://github.com/Soostone/katip.git
 [submodule "deps/aws-utils"]
 	path = deps/aws-utils
 	url = git@gitlab.com:soostone/shared/aws-utils.git
